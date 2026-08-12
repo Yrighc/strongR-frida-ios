@@ -38,10 +38,10 @@ jobs:
           security default-keychain -s "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
           cat > /tmp/cert-ext.cnf <<'CEOF'
-keyUsage = critical,digitalSignature
-extendedKeyUsage = codeSigning
-basicConstraints = critical,CA:false
-CEOF
+          keyUsage = critical,digitalSignature
+          extendedKeyUsage = codeSigning
+          basicConstraints = critical,CA:false
+          CEOF
           openssl req -x509 -newkey rsa:2048 -nodes -days 365 -keyout /tmp/sign-key.pem -out /tmp/sign-cert.pem -subj "/CN=FridaBuildIdentity" -extfile /tmp/cert-ext.cnf
           openssl pkcs12 -export -out /tmp/sign.p12 -inkey /tmp/sign-key.pem -in /tmp/sign-cert.pem -password pass:"$KEYCHAIN_PASS"
           security import /tmp/sign.p12 -k "$KEYCHAIN" -P "$KEYCHAIN_PASS" -T /usr/bin/codesign
