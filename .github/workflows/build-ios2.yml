@@ -29,29 +29,6 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-path
           xcodebuild -version
 
-      - name: Create self-signed codesigning identity
-        run: |
-          set -e
-          KEYCHAIN=build.keychain
-          KEYCHAIN_PASS=buildpass
-          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
-          security default-keychain -s "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
-          cat > /tmp/cert-ext.cnf <<'CEOF'
-          keyUsage = critical,digitalSignature
-          extendedKeyUsage = codeSigning
-          basicConstraints = critical,CA:false
-          CEOF
-          openssl req -x509 -newkey rsa:2048 -nodes -days 365 -keyout /tmp/sign-key.pem -out /tmp/sign-cert.pem -subj "/CN=FridaBuildIdentity" -extfile /tmp/cert-ext.cnf
-          openssl pkcs12 -export -out /tmp/sign.p12 -inkey /tmp/sign-key.pem -in /tmp/sign-cert.pem -password pass:"$KEYCHAIN_PASS"
-          security import /tmp/sign.p12 -k "$KEYCHAIN" -P "$KEYCHAIN_PASS" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN"
-          security find-identity -v -p codesigning "$KEYCHAIN"
-          CERTID=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/^[0-9]+)/{print $2}' | head -1)
-          test -n "$CERTID" || { echo "FATAL: no codesigning identity found"; exit 1; }
-          echo "IOS_CERTID=$CERTID" >> "$GITHUB_ENV"
-          echo "IOS_CERTID=$CERTID"
-
       - name: Clone Frida and Florida patches
         run: |
           git config --global user.name "GitHub Actions"
@@ -91,7 +68,7 @@ jobs:
           mkdir build-ios-arm64
           cd build-ios-arm64
           ../frida/configure --host=ios-arm64
-          make IOS_CERTID="$IOS_CERTID"
+          make IOS_CERTID="-"
           echo "=== Build completed ==="
 
       - name: Collect and upload artifacts
