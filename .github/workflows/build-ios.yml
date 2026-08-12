@@ -31,16 +31,26 @@ jobs:
 
       - name: Create self-signed codesigning identity
         run: |
-          security create-keychain -p buildpass build.keychain || true
-          security default-keychain -s build.keychain
-          security unlock-keychain -p buildpass build.keychain
-          openssl req -x509 -newkey rsa:2048 -keyout /tmp/sign-key.pem -out /tmp/sign-cert.pem -days 365 -nodes -subj "/CN=FridaBuildIdentity" -addext "keyUsage=digitalSignature" -addext "extendedKeyUsage=codeSigning" 2>/dev/null || openssl req -x509 -newkey rsa:2048 -keyout /tmp/sign-key.pem -out /tmp/sign-cert.pem -days 365 -nodes -subj "/CN=FridaBuildIdentity"
-          openssl pkcs12 -export -out /tmp/sign.p12 -inkey /tmp/sign-key.pem -in /tmp/sign-cert.pem -password pass:buildpass 2>/dev/null
-          security import /tmp/sign.p12 -k build.keychain -P buildpass -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k buildpass build.keychain
-          security find-identity -v -p codesigning build.keychain
-          echo "IOS_CERTID=$(security find-identity -v -p codesigning build.keychain | grep -oE '"[A-F0-9]{40}"' | tr -d '"' | head -1)" >> $GITHUB_ENV
-          echo "IOS_CERTID set: $(security find-identity -v -p codesigning build.keychain | grep -oE '"[A-F0-9]{40}"' | tr -d '"' | head -1)"
+          set -e
+          KEYCHAIN=build.keychain
+          KEYCHAIN_PASS=buildpass
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          cat > /tmp/cert-ext.cnf <<'CEOF'
+keyUsage = critical,digitalSignature
+extendedKeyUsage = codeSigning
+basicConstraints = critical,CA:false
+CEOF
+          openssl req -x509 -newkey rsa:2048 -nodes -days 365 -keyout /tmp/sign-key.pem -out /tmp/sign-cert.pem -subj "/CN=FridaBuildIdentity" -extfile /tmp/cert-ext.cnf
+          openssl pkcs12 -export -out /tmp/sign.p12 -inkey /tmp/sign-key.pem -in /tmp/sign-cert.pem -password pass:"$KEYCHAIN_PASS"
+          security import /tmp/sign.p12 -k "$KEYCHAIN" -P "$KEYCHAIN_PASS" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          CERTID=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/^[0-9]+)/{print $2}' | head -1)
+          test -n "$CERTID" || { echo "FATAL: no codesigning identity found"; exit 1; }
+          echo "IOS_CERTID=$CERTID" >> "$GITHUB_ENV"
+          echo "IOS_CERTID=$CERTID"
 
       - name: Clone Frida and Florida patches
         run: |
